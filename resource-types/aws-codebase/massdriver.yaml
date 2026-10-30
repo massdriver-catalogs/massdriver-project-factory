@@ -1,0 +1,133 @@
+name: aws-codebase
+version: 0.0.0
+label: AWS Codebase
+
+ui:
+  connectionOrientation: environmentDefault
+
+schema:
+  title: AWS Codebase
+  description: >-
+    Where an application's code lives and where its images go: the Git repository and the ECR
+    repository its pipeline pushes to. Set as an environment default on the application's
+    project, so every bundle there can find both.
+  type: object
+  additionalProperties: false
+  required:
+    - repository
+    - registry
+  properties:
+    repository:
+      title: Repository
+      type: object
+      additionalProperties: false
+      required:
+        - full_name
+        - url
+        - clone_url
+        - ssh_url
+        - default_branch
+        - visibility
+      properties:
+        full_name:
+          title: Repository
+          description: owner/name.
+          type: string
+          minLength: 1
+        url:
+          title: URL
+          type: string
+          pattern: ^https://
+        clone_url:
+          title: HTTPS Clone URL
+          type: string
+        ssh_url:
+          title: SSH Clone URL
+          type: string
+        default_branch:
+          title: Default Branch
+          type: string
+          minLength: 1
+        visibility:
+          title: Visibility
+          type: string
+          enum:
+            - private
+            - internal
+            - public
+    registry:
+      title: Registry
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - arn
+        - url
+        - region
+        - registry_id
+        - policies
+      properties:
+        name:
+          title: Repository Name
+          type: string
+          minLength: 1
+        arn:
+          title: Repository ARN
+          type: string
+          minLength: 1
+        url:
+          title: Repository URL
+          description: Image reference without a tag, e.g. 123456789012.dkr.ecr.us-east-1.amazonaws.com/app.
+          type: string
+          minLength: 1
+        region:
+          title: Region
+          type: string
+          minLength: 1
+        registry_id:
+          title: Registry ID
+          description: The AWS account ID that owns the registry.
+          type: string
+          pattern: ^[0-9]{12}$
+        policies:
+          title: Access Policies
+          description: IAM managed policies a consumer attaches to its role, e.g. pull for a function that runs the image.
+          type: array
+          minItems: 1
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              - name
+              - arn
+            properties:
+              name:
+                title: Name
+                type: string
+              arn:
+                title: Policy ARN
+                type: string
+    # Bundles that consume a codebase already run in the project it was made
+    # for, so the project would be a second source of truth. Uncomment it here
+    # and in the codebase bundle when bundles need the project's identifier or
+    # environments.
+    # project:
+    #   title: Project
+    #   type: object
+    #   additionalProperties: false
+    #   required:
+    #     - identifier
+    #     - name
+    #     - environments
+    #   properties:
+    #     identifier:
+    #       title: Identifier
+    #       type: string
+    #     name:
+    #       title: Name
+    #       type: string
+    #     environments:
+    #       title: Environments
+    #       type: array
+    #       items:
+    #         type: string
