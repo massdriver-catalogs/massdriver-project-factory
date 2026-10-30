@@ -8,7 +8,7 @@ The admin user is off. Access is a role on this registry: a pipeline's identity 
 
 ## Name
 
-Registry names are global across Azure, so the name is the instance's name with a short random suffix, e.g. `billingfactoryregistryk3x9q2`. Images are `<login server>/<image>:<tag>`.
+Registry names are global across Azure, so the name is the instance's name with a short random suffix, e.g. `factorybillingregistryk3x9q2` for the instance `factory-billing-registry`. Images are `<login server>/<image>:<tag>`.
 
 ## Tier
 

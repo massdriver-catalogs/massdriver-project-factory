@@ -1,6 +1,6 @@
 # Massdriver Project Factory: Azure and GitHub
 
-A Massdriver catalog for minting applications. The factory is itself a Massdriver project: its canvas holds a container registry, a Git repository and a Massdriver project, and every environment of the factory is one application. Adding an environment stamps out another application's project, repository and registry, already wired together.
+A Massdriver catalog for minting applications on Azure and GitHub. The factory is itself a Massdriver project: its canvas holds an Azure Container Registry, a GitHub repository and a Massdriver project, and every environment of the factory is one application. Adding an environment stamps out another application's project, repository and registry, already wired together, with a pipeline that can build, push and deploy into the new project on its first merge.
 
 ## The pattern
 
@@ -33,13 +33,50 @@ Each factory component has one job:
 
 The factory's own environment defaults come from the platform project, so every application it mints is built with the platform's credentials and network.
 
-### Why a factory instead of hand-made projects
+### What a platform team gets
 
 - One place to say "create these for this team": registry, repository, project, pipeline identity and group.
 - Registry policy, repository settings and who can deploy are set once per application, in one view, instead of across three tools.
 - Changing the pattern (a new scanner, a new pipeline template, a different IAM shape) is a change to a factory bundle, rolled out environment by environment, which here means application by application.
 
-From the factory, the environment list is the inventory of applications. From inside a minted application, the factory environment is where its repository, registry and pipeline identity come from.
+- Pipelines that can only deploy where the project says: each repository's pipeline gets its own Massdriver service account, in a group scoped to its own project and to the environments listed on the form.
+- No Azure secrets in GitHub: the pipeline signs in as its own managed identity through GitHub's OIDC tokens, federated for that repository's default branch only, with AcrPush on that one registry.
+
+From the factory, the environment list is the inventory of applications:
+
+```
+  Application factory project, environments
+
+  env            project-type   project          team
+  billing        app-hosting    billing          payments
+  search         app-hosting    search           discovery
+  etl            etl            etl              data
+```
+
+From inside a minted application, the factory environment is where its repository, registry and pipeline identity come from, and Massdriver's dependency view can walk from the application back through the factory to the platform.
+
+### The codebase resource
+
+The application's project gets one resource from the factory, `azure-codebase`, set as an environment default on each of its environments:
+
+```yaml
+repository:            # the same shape for any Git host
+  full_name: acme/billing
+  url: https://github.com/acme/billing
+  clone_url: https://github.com/acme/billing.git
+  ssh_url: git@github.com:acme/billing.git
+  default_branch: main
+  visibility: private
+registry:              # the container registry, scoped for role assignments
+  id: /subscriptions/<subscription>/resourceGroups/factory-billing-registry/providers/Microsoft.ContainerRegistry/registries/factorybillingregistryk3x9q2
+  name: factorybillingregistryk3x9q2
+  login_server: factorybillingregistryk3x9q2.azurecr.io
+  resource_group_name: factory-billing-registry
+  location: eastus
+# project: ...         # declared, commented out; see below
+```
+
+It is one resource rather than two because every bundle in the application's project needs the same repository and registry, in every environment. As an environment default it is set once per environment and reaches every bundle there, instead of a link per instance across projects. A service assigns its own identity AcrPull on `registry.id` and runs `registry.login_server/<repository name>:<git-sha>`; a bundle that opens issues or reads the code uses `repository`.
 
 ### Why "codebase"
 
@@ -63,15 +100,9 @@ Massdriver also sets `md-project` and `md-environment` on everything. Use them a
 
 Keep values short and lowercase. They appear in policy conditions, so a renamed value is a policy change.
 
-## Cloud variants
+## Other clouds and Git hosts
 
-Each variant has the same shape, with that cloud's registry, credentials and CI identity.
-
-| Branch | Registry | Git host |
-|---|---|---|
-| `aws-github` | ECR | GitHub |
-| `gcp-github` | Artifact Registry | GitHub |
-| `azure-github` | Azure Container Registry | GitHub |
+The pattern doesn't depend on Azure or GitHub. An AWS variant swaps in ECR and an IAM role trusted through GitHub's OIDC provider; a Google Cloud variant swaps in Artifact Registry and workload identity federation. A GitLab variant replaces the GitHub repository bundle. The Massdriver project bundle and the shape of the codebase resource stay the same.
 
 ## Azure and GitHub
 
@@ -119,11 +150,7 @@ The arrow out of the factory is an environment default, not a link. The codebase
 
 ## Shared modules
 
-`modules/` holds the OpenTofu the cloud variants share. Bundles keep only what is specific to their cloud and call these modules for the rest.
-
-A published bundle contains only its own directory, so bundles source modules as `./modules/<name>` and `make modules` copies `modules/` into each bundle that uses one, before build and publish. The copies are not committed.
-
-Module inputs and outputs are host-neutral where they can be: a repository is described by its URL, clone URLs and default branch, not GitHub's API shapes, so a GitLab module can produce the same outputs.
+`modules/` is for OpenTofu shared across cloud variants. A published bundle contains only its own directory, so bundles source modules as `./modules/<name>` and `make modules` copies `modules/` into each bundle that uses one, before build and publish. The copies are not committed.
 
 ## Repository layout
 
