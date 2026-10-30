@@ -1,6 +1,6 @@
-# Massdriver Project Factory
+# Massdriver Project Factory: Azure and GitHub
 
-A Massdriver catalog for minting applications. The factory is itself a Massdriver project: its canvas holds a container registry, a Git repository and a Massdriver project, and every environment of the factory is one application. Adding an environment stamps out another application's project, repository and registry, already wired together.
+A Massdriver catalog for minting applications on Azure and GitHub. The factory is itself a Massdriver project: its canvas holds an Azure Container Registry, a GitHub repository and a Massdriver project, and every environment of the factory is one application. Adding an environment stamps out another application's project, repository and registry, already wired together, with a pipeline that can build, push and deploy into the new project on its first merge.
 
 ## The pattern
 
@@ -33,13 +33,50 @@ Each factory component has one job:
 
 The factory's own environment defaults come from the platform project, so every application it mints is built with the platform's credentials and network.
 
-### Why a factory instead of hand-made projects
+### What a platform team gets
 
 - One place to say "create these for this team": registry, repository, project, pipeline identity and group.
 - Registry policy, repository settings and who can deploy are set once per application, in one view, instead of across three tools.
 - Changing the pattern (a new scanner, a new pipeline template, a different IAM shape) is a change to a factory bundle, rolled out environment by environment, which here means application by application.
 
-From the factory, the environment list is the inventory of applications. From inside a minted application, the factory environment is where its repository, registry and pipeline identity come from.
+- Pipelines that can only deploy where the project says: each repository's pipeline gets its own Massdriver service account, in a group scoped to its own project and to the environments listed on the form.
+- No Azure secrets in GitHub: the pipeline signs in as its own managed identity through GitHub's OIDC tokens, federated for that repository's default branch only, with AcrPush on that one registry.
+
+From the factory, the environment list is the inventory of applications:
+
+```
+  Application factory project, environments
+
+  env            project-type   project          team
+  billing        app-hosting    billing          payments
+  search         app-hosting    search           discovery
+  etl            etl            etl              data
+```
+
+From inside a minted application, the factory environment is where its repository, registry and pipeline identity come from, and Massdriver's dependency view can walk from the application back through the factory to the platform.
+
+### The codebase resource
+
+The application's project gets one resource from the factory, `azure-codebase`, set as an environment default on each of its environments:
+
+```yaml
+repository:            # the same shape for any Git host
+  full_name: acme/billing
+  url: https://github.com/acme/billing
+  clone_url: https://github.com/acme/billing.git
+  ssh_url: git@github.com:acme/billing.git
+  default_branch: main
+  visibility: private
+registry:              # the container registry, scoped for role assignments
+  id: /subscriptions/<subscription>/resourceGroups/factory-billing-registry/providers/Microsoft.ContainerRegistry/registries/factorybillingregistryk3x9q2
+  name: factorybillingregistryk3x9q2
+  login_server: factorybillingregistryk3x9q2.azurecr.io
+  resource_group_name: factory-billing-registry
+  location: eastus
+# project: ...         # declared, commented out; see below
+```
+
+It is one resource rather than two because every bundle in the application's project needs the same repository and registry, in every environment. As an environment default it is set once per environment and reaches every bundle there, instead of a link per instance across projects. A service assigns its own identity AcrPull on `registry.id` and runs `registry.login_server/<repository name>:<git-sha>`; a bundle that opens issues or reads the code uses `repository`.
 
 ### Why "codebase"
 
@@ -63,23 +100,57 @@ Massdriver also sets `md-project` and `md-environment` on everything. Use them a
 
 Keep values short and lowercase. They appear in policy conditions, so a renamed value is a policy change.
 
-## Cloud variants
+## Other clouds and Git hosts
 
-Each variant has the same shape, with that cloud's registry, credentials and CI identity.
+The pattern doesn't depend on Azure or GitHub. An AWS variant swaps in ECR and an IAM role trusted through GitHub's OIDC provider; a Google Cloud variant swaps in Artifact Registry and workload identity federation. A GitLab variant replaces the GitHub repository bundle. The Massdriver project bundle and the shape of the codebase resource stay the same.
 
-| Branch | Registry | Git host |
-|---|---|---|
-| `aws-github` | ECR | GitHub |
-| `gcp-github` | Artifact Registry | GitHub |
-| `azure-github` | Azure Container Registry | GitHub |
+## Azure and GitHub
+
+### Bundles
+
+| Bundle | What it is |
+|---|---|
+| `container-registry` | The application's Azure Container Registry, in its own resource group, admin user off |
+| `massdriver-project` | The application's Massdriver project, its environments, and a group that can deploy in the ones the pipeline ships to |
+| `github-repo` | The application's GitHub repository, with a pipeline that pushes to the registry as a managed identity federated with GitHub's OIDC tokens, and deploys into the project with its own service account |
+| `codebase` | The repository and registry merged into one `azure-codebase` resource, shared with the application's project |
+
+Azure trusts GitHub's tokens per identity, through a federated credential on each repository's managed identity, so there is no account-wide OIDC bundle as on AWS and Google Cloud.
+
+### Resource types
+
+| Resource type | What it carries |
+|---|---|
+| `azure-container-registry` | A registry's resource ID, login server and resource group |
+| `massdriver-project` | A project's identifier, environments and deploy group |
+| `source-repository` | A Git repository's URLs and default branch, the same for any host |
+| `azure-codebase` | Repository and registry together; an environment default in the application's project |
+
+Credentials: **Azure Service Principal** (`azure-service-principal`), which every Azure bundle deploys with; **GitHub App** (`github-app`), which creates repositories and sets their variables and secrets; and **Massdriver Service Account** (`massdriver-service-account`), which creates projects, groups and pipeline identities and shares the codebase. All three are environment defaults on the factory.
+
+### How bundles connect
+
+```mermaid
+flowchart LR
+  subgraph Factory[Application factory, one environment per app]
+    ACR[container-registry] -->|azure-container-registry| REPO[github-repo]
+    MDP[massdriver-project] -->|massdriver-project| REPO
+    ACR -->|azure-container-registry| CB[codebase]
+    REPO -->|source-repository| CB
+    MDP -->|massdriver-project| CB
+  end
+  subgraph App[The application's project, per environment]
+    SVC[application bundles]
+  end
+  CB -->|azure-codebase| SVC
+  MDP -. creates .-> App
+```
+
+The arrow out of the factory is an environment default, not a link. The codebase reaches the application's project because it is shared with every environment whose `md-project` is that project; it still has to be set as each environment's default there, since the Massdriver Terraform provider can't set environment defaults yet.
 
 ## Shared modules
 
-`modules/` holds the OpenTofu the cloud variants share. Bundles keep only what is specific to their cloud and call these modules for the rest.
-
-A published bundle contains only its own directory, so bundles source modules as `./modules/<name>` and `make modules` copies `modules/` into each bundle that uses one, before build and publish. The copies are not committed.
-
-Module inputs and outputs are host-neutral where they can be: a repository is described by its URL, clone URLs and default branch, not GitHub's API shapes, so a GitLab module can produce the same outputs.
+`modules/` is for OpenTofu shared across cloud variants. A published bundle contains only its own directory, so bundles source modules as `./modules/<name>` and `make modules` copies `modules/` into each bundle that uses one, before build and publish. The copies are not committed.
 
 ## Repository layout
 
@@ -88,6 +159,7 @@ platforms/        Credential types
 resource-types/   Contracts between bundles
 bundles/          OpenTofu bundles
 modules/          OpenTofu shared by bundles
+bootstrap/        The factory project and its canvas, from one terraform apply
 .github/workflows Publishing
 ```
 
@@ -96,7 +168,7 @@ modules/          OpenTofu shared by bundles
 1. **Publish from GitHub Actions.** First turn on **Settings → General → Grant new bundle repositories to all projects**, or projects can't use what you publish. Create a Massdriver service account with a **1 year** token in a group allowed to publish to the catalog. In the repository's **Settings → Secrets and variables → Actions**, add its key as the secret `MASSDRIVER_API_KEY` and your organization ID as `MASSDRIVER_ORG_ID` (a variable or a secret). Then run **Actions → Publish → Run workflow** with *all* ticked. After that, every push to `main` publishes whatever changed since the last successful publish: credential types and resource types first, then bundles.
 2. **Define the attributes** above in your organization's settings.
 3. **Add credentials** in Massdriver, following the instructions on each credential's form, and set them as defaults on the factory's environments.
-4. **Create the factory project**, tagged `project-type: ci`, and put the registry, Massdriver project, Git repo and codebase bundles on its canvas, linked.
+4. **Create the factory project**, tagged `project-type: ci`, and put the registry, Massdriver project, Git repo and codebase bundles on its canvas, linked. [bootstrap/](bootstrap/) does this.
 5. **Add an environment per application**, tagged with its `application` and `team`, and deploy it.
 6. **Set the new project's environment defaults:** its cloud credentials, network, and the codebase.
 

@@ -1,0 +1,114 @@
+name: azure-codebase
+version: 0.0.0
+label: Azure Codebase
+
+ui:
+  connectionOrientation: environmentDefault
+
+schema:
+  title: Azure Codebase
+  description: >-
+    Where an application's code lives and where its images go: the Git repository and the
+    container registry its pipeline pushes to. Set as an environment default on the
+    application's project, so every bundle there can find both.
+  type: object
+  additionalProperties: false
+  required:
+    - repository
+    - registry
+  properties:
+    repository:
+      title: Repository
+      type: object
+      additionalProperties: false
+      required:
+        - full_name
+        - url
+        - clone_url
+        - ssh_url
+        - default_branch
+        - visibility
+      properties:
+        full_name:
+          title: Repository
+          description: owner/name.
+          type: string
+          minLength: 1
+        url:
+          title: URL
+          type: string
+          pattern: ^https://
+        clone_url:
+          title: HTTPS Clone URL
+          type: string
+        ssh_url:
+          title: SSH Clone URL
+          type: string
+        default_branch:
+          title: Default Branch
+          type: string
+          minLength: 1
+        visibility:
+          title: Visibility
+          type: string
+          enum:
+            - private
+            - internal
+            - public
+    registry:
+      title: Registry
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - login_server
+        - resource_group_name
+        - location
+      properties:
+        id:
+          title: Registry ID
+          description: The registry's Azure resource ID, the scope for role assignments.
+          type: string
+          minLength: 1
+        name:
+          title: Registry Name
+          type: string
+          minLength: 1
+        login_server:
+          title: Login Server
+          description: What docker logs in to, e.g. billing.azurecr.io.
+          type: string
+          minLength: 1
+        resource_group_name:
+          title: Resource Group
+          type: string
+          minLength: 1
+        location:
+          title: Location
+          type: string
+          minLength: 1
+    # Bundles that consume a codebase already run in the project it was made
+    # for, so the project would be a second source of truth. Uncomment it here
+    # and in the codebase bundle when bundles need the project's identifier or
+    # environments.
+    # project:
+    #   title: Project
+    #   type: object
+    #   additionalProperties: false
+    #   required:
+    #     - identifier
+    #     - name
+    #     - environments
+    #   properties:
+    #     identifier:
+    #       title: Identifier
+    #       type: string
+    #     name:
+    #       title: Name
+    #       type: string
+    #     environments:
+    #       title: Environments
+    #       type: array
+    #       items:
+    #         type: string

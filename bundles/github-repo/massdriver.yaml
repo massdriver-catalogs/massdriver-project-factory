@@ -1,0 +1,178 @@
+name: github-repo
+description: >-
+  An application's GitHub repository, with a pipeline that builds an image, pushes it to the
+  application's container registry and deploys it into the application's Massdriver project.
+source_url: https://github.com/massdriver-catalogs/massdriver-project-factory/tree/azure-github/bundles/github-repo
+version: 0.0.0
+
+params:
+  examples:
+    - __name: Private
+      visibility: private
+      default_branch: main
+      add_workflows: true
+      adopt_existing_repository: false
+      image_platform: linux/amd64
+      release_component: ""
+      release_image_field: image_uri
+    - __name: Public
+      visibility: public
+      default_branch: main
+      add_workflows: true
+      adopt_existing_repository: false
+      image_platform: linux/amd64
+      release_component: ""
+      release_image_field: image_uri
+    - __name: Adopt an existing repository
+      visibility: private
+      default_branch: main
+      add_workflows: false
+      adopt_existing_repository: true
+      image_platform: linux/amd64
+      release_component: ""
+      release_image_field: image_uri
+  required:
+    - repository_name
+    - visibility
+    - default_branch
+    - add_workflows
+    - image_platform
+  properties:
+    monthly_budget:
+      title: Monthly budget (USD)
+      description: >-
+        What this instance should cost in a month. When Massdriver's cost data goes over it, a
+        cheaper configuration is proposed for review.
+      type: number
+      minimum: 0
+      default: 5
+    repository_name:
+      title: Repository name
+      description: >-
+        Becomes github.com/ORGANIZATION/NAME, e.g. billing. Changing it means a new repository.
+      type: string
+      minLength: 1
+      maxLength: 100
+      pattern: ^[A-Za-z0-9._-]+$
+      message:
+        pattern: "Letters, digits, dot, underscore and hyphen only."
+      $md.immutable: true
+    description:
+      title: Description
+      description: Shown on the repository page.
+      type: string
+      default: ""
+    visibility:
+      title: Visibility
+      description: "***Private repositories use GitHub Actions minutes, billed beyond the plan's free allowance; public ones build free.*** Anything pushed to a public repository is public for good."
+      type: string
+      default: private
+      oneOf:
+        - const: private
+          title: Private — only members of the organization
+        - const: internal
+          title: Internal — every member of the enterprise
+        - const: public
+          title: Public — anyone on the internet
+    default_branch:
+      title: Default branch
+      description: The branch that pushes images and releases them.
+      type: string
+      default: main
+      pattern: ^[A-Za-z0-9._/-]+$
+      $md.immutable: true
+    add_workflows:
+      title: Add the pipeline
+      description: >-
+        Commits build.yml and release.yml. They are written once, when the repository is created,
+        and then belong to the team; redeploying never overwrites them.
+      type: boolean
+      default: true
+      $md.immutable: true
+    adopt_existing_repository:
+      title: Adopt an existing repository
+      description: >-
+        Take over a repository that already exists in the organization instead of creating one.
+        Nothing in it is overwritten and the pipeline isn't committed; the variables and secret it
+        reads are still set. Only the first deploy reads this.
+      type: boolean
+      default: false
+      $md.immutable: true
+    image_platform:
+      title: Image platform
+      description: The CPU architecture the image is built for. Match what the application runs on.
+      type: string
+      default: linux/amd64
+      oneOf:
+        - const: linux/amd64
+          title: x86-64 (linux/amd64)
+        - const: linux/arm64
+          title: Arm (linux/arm64)
+    release_environment:
+      title: Release to environment
+      description: >-
+        The environment each new image deploys to after a build on the default branch. It must be
+        one the project's deploy group can deploy in.
+      type: string
+      $md.enum:
+        connection: project
+        options: .environments
+        value: .identifier
+    release_component:
+      title: Release component
+      description: >-
+        The component in the project that runs the image, by identifier, e.g. api. Leave empty to
+        build and push without deploying.
+      type: string
+      default: ""
+      pattern: ^(|[a-z0-9]{1,20})$
+      message:
+        pattern: "A component identifier like api, or empty."
+    release_image_field:
+      title: Image param
+      description: >-
+        The param on that component that takes the image reference. The release sets it to the
+        new image and deploys.
+      type: string
+      default: image_uri
+      pattern: ^[A-Za-z_][A-Za-z0-9_]*$
+
+dependencies:
+  azure_authentication:
+    resource_type: azure-service-principal@0.0.0
+    required: true
+  github:
+    resource_type: github-app@0.0.0
+    required: true
+  massdriver:
+    resource_type: massdriver-service-account@0.0.0
+    required: true
+  registry:
+    resource_type: azure-container-registry@0.0.0
+    required: true
+  project:
+    resource_type: massdriver-project@0.0.0
+    required: true
+
+resources:
+  repository:
+    resource_type: source-repository@0.0.0
+    required: true
+
+steps:
+  - path: src
+    provisioner: opentofu:1.10
+
+ui:
+  ui:order:
+    - repository_name
+    - description
+    - visibility
+    - default_branch
+    - add_workflows
+    - adopt_existing_repository
+    - image_platform
+    - release_environment
+    - release_component
+    - release_image_field
+    - "*"
