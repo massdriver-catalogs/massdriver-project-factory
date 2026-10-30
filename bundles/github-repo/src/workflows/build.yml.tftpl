@@ -1,0 +1,74 @@
+name: build
+
+on:
+  push:
+    branches: [${branch}]
+  pull_request:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  GITLEAKS_VERSION: 8.30.1
+  TRIVY_VERSION: 0.76.0
+
+jobs:
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # The gitleaks GitHub Action needs a paid license in organization repos;
+      # the CLI doesn't.
+      - name: Scan for secrets
+        run: |
+          curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v$${GITLEAKS_VERSION}/gitleaks_$${GITLEAKS_VERSION}_linux_x64.tar.gz" | tar -xz gitleaks
+          ./gitleaks git --redact --verbose .
+
+  build:
+    needs: [secrets]
+    if: hashFiles('Dockerfile') != ''
+    runs-on: ubuntu-latest
+    env:
+      PUSH: $${{ github.event_name == 'push' }}
+      IMAGE: $${{ vars.IMAGE_REPOSITORY }}:$${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-qemu-action@v4
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: ${platform}
+          provenance: false
+          load: true
+          tags: $${{ env.IMAGE }}
+
+      - name: Scan the image
+        run: |
+          curl -fsSL "https://github.com/aquasecurity/trivy/releases/download/v$${TRIVY_VERSION}/trivy_$${TRIVY_VERSION}_Linux-64bit.tar.gz" | tar -xz trivy
+          ./trivy image --exit-code 1 --severity CRITICAL --ignore-unfixed --no-progress "$IMAGE"
+
+      - name: Get AWS credentials
+        if: env.PUSH == 'true'
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: $${{ vars.AWS_ROLE_ARN }}
+          aws-region: $${{ vars.AWS_REGION }}
+
+      - name: Log in to ECR
+        if: env.PUSH == 'true'
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Push
+        if: env.PUSH == 'true'
+        run: |
+          docker push "$IMAGE"
+          echo "Pushed $IMAGE" >> "$GITHUB_STEP_SUMMARY"

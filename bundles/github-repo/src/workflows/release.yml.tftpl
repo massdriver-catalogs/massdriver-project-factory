@@ -1,0 +1,58 @@
+name: release
+
+on:
+  workflow_run:
+    workflows: [build]
+    types: [completed]
+    branches: [${branch}]
+
+permissions: {}
+
+# Releases go out in merge order; a newer one waits instead of cancelling.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  MASS_VERSION: ${mass_version}
+
+jobs:
+  deploy:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      vars.MASSDRIVER_RELEASE_INSTANCE != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      MASSDRIVER_API_KEY: $${{ secrets.MASSDRIVER_API_KEY }}
+      MASSDRIVER_ORGANIZATION_ID: $${{ vars.MASSDRIVER_ORGANIZATION_ID }}
+      MASSDRIVER_ORG_ID: $${{ vars.MASSDRIVER_ORGANIZATION_ID }}
+      MASSDRIVER_URL: $${{ vars.MASSDRIVER_URL }}
+      INSTANCE: $${{ vars.MASSDRIVER_RELEASE_INSTANCE }}
+      FIELD: $${{ vars.MASSDRIVER_IMAGE_FIELD }}
+      IMAGE: $${{ vars.IMAGE_REPOSITORY }}:$${{ github.event.workflow_run.head_sha }}
+      SHA: $${{ github.event.workflow_run.head_sha }}
+    steps:
+      # The build skips repositories without a Dockerfile and still succeeds,
+      # so there is no image to release.
+      - uses: actions/checkout@v7
+        with:
+          ref: $${{ env.SHA }}
+          sparse-checkout: Dockerfile
+          sparse-checkout-cone-mode: false
+
+      - name: Install the Massdriver CLI
+        if: hashFiles('Dockerfile') != ''
+        run: |
+          curl -fsSL "https://github.com/massdriver-cloud/mass/releases/download/$${MASS_VERSION}/mass-$${MASS_VERSION}-linux-amd64.tar.gz" | tar -xz mass
+
+      - name: Deploy
+        if: hashFiles('Dockerfile') != ''
+        run: |
+          ./mass instance deploy "$INSTANCE" \
+            --patch ".$FIELD = \"$IMAGE\"" \
+            --message "Release $${SHA:0:7}" \
+            --follow
+          echo "Released $IMAGE to $INSTANCE" >> "$GITHUB_STEP_SUMMARY"
