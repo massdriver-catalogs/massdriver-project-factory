@@ -1,0 +1,182 @@
+name: massdriver-project
+description: >-
+  A Massdriver project for one application, with its environments and a group that can deploy
+  into them. The factory makes one per environment, so each factory environment is an application.
+source_url: https://github.com/massdriver-catalogs/massdriver-project-factory/tree/azure-github/bundles/massdriver-project
+version: 0.0.0
+
+params:
+  examples:
+    - __name: Application
+      project_type: app-hosting
+      environments:
+        - identifier: dev
+          name: Development
+          separation_of_duty: false
+          decommission_protection: false
+        - identifier: prod
+          name: Production
+          separation_of_duty: true
+          decommission_protection: true
+      deploy_environments:
+        - dev
+    - __name: Data pipeline
+      project_type: etl
+      environments:
+        - identifier: dev
+          name: Development
+          separation_of_duty: false
+          decommission_protection: false
+        - identifier: prod
+          name: Production
+          separation_of_duty: true
+          decommission_protection: true
+      deploy_environments:
+        - dev
+    - __name: Single environment
+      project_type: app-hosting
+      environments:
+        - identifier: dev
+          name: Development
+          separation_of_duty: false
+          decommission_protection: false
+      deploy_environments:
+        - dev
+  required:
+    - project_identifier
+    - project_name
+    - environments
+    - deploy_environments
+  properties:
+    project_identifier:
+      title: Project identifier
+      description: >-
+        The project's short name, e.g. billing. It starts every environment and instance ID in the
+        project, so it can't change.
+      type: string
+      pattern: ^[a-z0-9]{1,20}$
+      message:
+        pattern: "Up to 20 lowercase letters and digits."
+      $md.immutable: true
+    project_name:
+      title: Project name
+      description: Shown in Massdriver, e.g. Billing.
+      type: string
+      minLength: 1
+    description:
+      title: Description
+      type: string
+      default: ""
+    project_type:
+      title: Project type
+      description: >-
+        Set as the project's project-type attribute, so the project can be found and governed with
+        others of its kind. The organization must define the attribute first.
+      type: string
+      default: ""
+      oneOf:
+        - const: ""
+          title: Not set
+        - const: app-hosting
+          title: app-hosting — runs an application
+        - const: etl
+          title: etl — moves and transforms data
+        - const: ci
+          title: ci — builds and releases software
+        - const: platform
+          title: platform — shared foundations
+    team:
+      title: Team
+      description: >-
+        Set as the project's team attribute, e.g. payments. Policies that match on team give that
+        team's group its access. Leave empty to leave it unset.
+      type: string
+      default: ""
+      pattern: ^(|[a-z0-9][a-z0-9-]*)$
+      message:
+        pattern: "Lowercase letters, digits and hyphens, or empty."
+    tag_application:
+      title: Tag with the application
+      description: >-
+        Sets the project's application attribute to its identifier, so the project and the factory
+        environment that made it filter together. The organization must define the attribute first.
+      type: boolean
+      default: false
+    environments:
+      title: Environments
+      description: >-
+        Removing an environment deletes it, which fails while anything in it is still deployed.
+      type: array
+      minItems: 1
+      items:
+        type: object
+        required:
+          - identifier
+          - name
+        properties:
+          identifier:
+            title: Identifier
+            description: e.g. dev. Becomes the second part of the environment's ID.
+            type: string
+            pattern: ^[a-z0-9]{1,20}$
+            message:
+              pattern: "Up to 20 lowercase letters and digits."
+          name:
+            title: Name
+            type: string
+            minLength: 1
+          separation_of_duty:
+            title: Separation of duty
+            description: A proposed deployment must be approved by someone other than the person who proposed it.
+            type: boolean
+            default: false
+          decommission_protection:
+            title: Decommission protection
+            description: Nothing in the environment can be decommissioned until this is turned off.
+            type: boolean
+            default: false
+    deploy_environments:
+      title: Pipeline deploys to
+      description: >-
+        Environment identifiers the deploy group can deploy in, e.g. dev. The application's
+        pipeline joins the group, so this is where merges ship on their own. Everywhere else the
+        group can only view.
+      type: array
+      uniqueItems: true
+      default: []
+      items:
+        type: string
+        pattern: ^[a-z0-9]{1,20}$
+
+dependencies:
+  massdriver:
+    resource_type: massdriver-service-account@0.0.0
+    required: true
+
+resources:
+  project:
+    resource_type: massdriver-project@0.0.0
+    required: true
+
+steps:
+  - path: src
+    provisioner: opentofu:1.10
+
+ui:
+  ui:order:
+    - project_identifier
+    - project_name
+    - description
+    - project_type
+    - team
+    - tag_application
+    - environments
+    - deploy_environments
+    - "*"
+  environments:
+    items:
+      ui:order:
+        - identifier
+        - name
+        - separation_of_duty
+        - decommission_protection

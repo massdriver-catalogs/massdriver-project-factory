@@ -1,0 +1,82 @@
+name: container-registry
+description: >-
+  One Azure Container Registry for one app, in its own resource group. Pipelines push to it and
+  services pull from it, each with a role on this registry alone.
+source_url: https://github.com/massdriver-catalogs/massdriver-project-factory/tree/azure-github/bundles/container-registry
+version: 0.0.0
+
+params:
+  examples:
+    - __name: Development
+      monthly_budget: 6
+      location: eastus
+      sku: Basic
+    - __name: Production
+      monthly_budget: 25
+      location: eastus
+      sku: Standard
+  required:
+    - location
+    - sku
+  properties:
+    monthly_budget:
+      title: Monthly budget (USD)
+      description: >-
+        What this instance should cost in a month. When Massdriver's cost data goes over it, a
+        cheaper configuration is proposed for review.
+      type: number
+      minimum: 0
+      default: 6
+    location:
+      title: Location
+      description: Services pulling from this registry pull fastest, and free of egress, in the same region.
+      type: string
+      default: eastus
+      $md.immutable: true
+      oneOf:
+        - const: eastus
+          title: East US
+        - const: eastus2
+          title: East US 2
+        - const: westus2
+          title: West US 2
+        - const: centralus
+          title: Central US
+        - const: westeurope
+          title: West Europe
+        - const: northeurope
+          title: North Europe
+        - const: japaneast
+          title: Japan East
+    sku:
+      title: Tier
+      description: >-
+        Basic holds 10 GB and suits one app's images. Standard holds 100 GB with more throughput.
+        ***Basic is ~$5/month, Standard ~$20/month.***
+      type: string
+      default: Basic
+      oneOf:
+        - const: Basic
+          title: Basic
+        - const: Standard
+          title: Standard
+
+dependencies:
+  azure_authentication:
+    resource_type: azure-service-principal@0.0.0
+    required: true
+
+resources:
+  registry:
+    resource_type: azure-container-registry@0.0.0
+    required: true
+
+steps:
+  - path: src
+    provisioner: opentofu:1.10
+
+ui:
+  ui:order:
+    - location
+    - sku
+    - "*"

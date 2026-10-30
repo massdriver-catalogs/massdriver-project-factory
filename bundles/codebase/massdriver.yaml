@@ -1,0 +1,51 @@
+name: codebase
+description: >-
+  An application's codebase: its Git repository and container registry as one resource, shared
+  with the application's Massdriver project to set as an environment default there.
+source_url: https://github.com/massdriver-catalogs/massdriver-project-factory/tree/azure-github/bundles/codebase
+version: 0.0.0
+
+params:
+  examples:
+    - __name: Shared with the project
+      share_with_project: true
+    - __name: Not shared
+      share_with_project: false
+  required:
+    - share_with_project
+  properties:
+    share_with_project:
+      title: Share with the project
+      description: >-
+        Lets every environment of the application's project use the codebase, so it can be set as
+        their default. Off, only people who can already see the factory can use it.
+      type: boolean
+      default: true
+
+dependencies:
+  massdriver:
+    resource_type: massdriver-service-account@0.0.0
+    required: true
+  repository:
+    resource_type: source-repository@0.0.0
+    required: true
+  registry:
+    resource_type: azure-container-registry@0.0.0
+    required: true
+  project:
+    resource_type: massdriver-project@0.0.0
+    required: true
+
+resources:
+  codebase:
+    resource_type: azure-codebase@0.0.0
+    required: true
+
+steps:
+  - path: src
+    provisioner: opentofu:1.10
+
+ui:
+  ui:order:
+    - share_with_project
+    - "*"

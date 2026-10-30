@@ -1,0 +1,44 @@
+name: azure-service-principal
+version: 0.0.0
+label: Azure Service Principal
+
+ui:
+  connectionOrientation: environmentDefault
+  environmentDefaultGroup: credentials
+  instructions:
+    - label: Azure CLI
+      path: ./instructions/Azure CLI.md
+  schema:
+    ui:order: [tenant_id, subscription_id, client_id, client_secret, "*"]
+
+schema:
+  title: Azure Service Principal
+  description: A service principal in your Azure tenant that Massdriver uses to build and run what you deploy in one subscription.
+  type: object
+  required:
+    - client_id
+    - client_secret
+    - subscription_id
+    - tenant_id
+  properties:
+    tenant_id:
+      title: Tenant ID
+      description: The Microsoft Entra tenant the service principal belongs to.
+      type: string
+      format: uuid
+    subscription_id:
+      title: Subscription ID
+      description: The subscription Massdriver deploys into.
+      type: string
+      format: uuid
+    client_id:
+      title: Client ID
+      description: The service principal's application (client) ID, appId in the CLI's output.
+      type: string
+      format: uuid
+    client_secret:
+      title: Client Secret
+      description: The secret the CLI printed as password. It's shown only once.
+      type: string
+      minLength: 1
+      $md.sensitive: true

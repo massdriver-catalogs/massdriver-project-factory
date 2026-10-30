@@ -1,0 +1,43 @@
+name: azure-container-registry
+version: 0.0.0
+label: Azure Container Registry
+
+ui:
+  connectionOrientation: link
+
+schema:
+  title: Azure Container Registry
+  description: >-
+    One container registry. Consumers assign their own identity AcrPull or AcrPush on the
+    registry's ID rather than a subscription-wide role.
+  type: object
+  additionalProperties: false
+  required:
+    - id
+    - name
+    - login_server
+    - resource_group_name
+    - location
+  properties:
+    id:
+      title: Registry ID
+      description: The registry's Azure resource ID, the scope for role assignments.
+      type: string
+      pattern: ^/subscriptions/
+    name:
+      title: Registry Name
+      type: string
+      minLength: 1
+    login_server:
+      title: Login Server
+      description: What docker logs in to, e.g. billing.azurecr.io.
+      type: string
+      minLength: 1
+    resource_group_name:
+      title: Resource Group
+      type: string
+      minLength: 1
+    location:
+      title: Location
+      type: string
+      minLength: 1

@@ -1,0 +1,15 @@
+factory = {
+  identifier = "factory"
+  name       = "Application Factory"
+  attributes = { project-type = "ci" }
+}
+
+applications = {
+  billing = { name = "Billing", attributes = { application = "billing", team = "payments" } }
+  search  = { name = "Search", attributes = { application = "search", team = "discovery" } }
+}
+
+catalog_publishers = {
+  group           = "Catalog Publishers"
+  service_account = "Catalog Publisher"
+}

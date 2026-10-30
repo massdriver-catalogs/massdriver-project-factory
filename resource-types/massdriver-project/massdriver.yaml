@@ -1,0 +1,76 @@
+name: massdriver-project
+version: 0.0.0
+label: Massdriver Project
+
+ui:
+  connectionOrientation: link
+
+schema:
+  title: Massdriver Project
+  description: >-
+    A Massdriver project made for one application, its environments, and the group allowed to deploy
+    into it.
+  type: object
+  additionalProperties: false
+  required:
+    - id
+    - identifier
+    - name
+    - attributes
+    - environments
+    - deploy_group_id
+    - deploy_environments
+  properties:
+    id:
+      title: Project ID
+      type: string
+      minLength: 1
+    identifier:
+      title: Identifier
+      description: The project's short name, the first part of every environment and instance ID in it.
+      type: string
+      pattern: ^[a-z0-9]{1,20}$
+    name:
+      title: Name
+      type: string
+      minLength: 1
+    attributes:
+      title: Attributes
+      description: The project's attributes, e.g. project-type and team.
+      type: object
+      additionalProperties:
+        type: string
+    environments:
+      title: Environments
+      type: array
+      items:
+        type: object
+        additionalProperties: false
+        required:
+          - id
+          - identifier
+          - name
+        properties:
+          id:
+            title: Environment ID
+            description: The project and environment identifiers joined, e.g. billing-dev.
+            type: string
+            minLength: 1
+          identifier:
+            title: Identifier
+            type: string
+            pattern: ^[a-z0-9]{1,20}$
+          name:
+            title: Name
+            type: string
+    deploy_group_id:
+      title: Deploy Group ID
+      description: The group that can view the project and deploy to its release environments. Pipelines join it.
+      type: string
+      minLength: 1
+    deploy_environments:
+      title: Deploy Environments
+      description: Environment identifiers the deploy group can deploy in.
+      type: array
+      items:
+        type: string
